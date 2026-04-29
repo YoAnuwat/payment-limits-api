@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Payment Limits — Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f1f5f9;
+      color: #0f172a;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ===== SIDEBAR ===== */
+    .sidebar {
+      width: 248px;
+      min-height: 100vh;
+      background: #0c1426;
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      left: 0; top: 0; bottom: 0;
+      z-index: 50;
+    }
+    .sb-logo {
+      padding: 22px 20px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .sb-logo-icon {
+      width: 38px; height: 38px;
+      background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      box-shadow: 0 4px 12px rgba(37,99,235,0.3);
+    }
+    .sb-logo-icon svg { width: 19px; height: 19px; fill: white; }
+    .sb-logo-text { font-size: 14px; font-weight: 800; color: white; line-height: 1.3; letter-spacing: -0.2px; }
+    .sb-logo-sub { font-size: 11px; color: #475569; margin-top: 1px; }
+
+    .sb-nav { padding: 20px 12px; flex: 1; }
+    .sb-section-label {
+      font-size: 10px; font-weight: 700; color: #334155;
+      text-transform: uppercase; letter-spacing: 0.1em;
+      padding: 0 10px; margin-bottom: 8px;
+    }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px; border-radius: 8px;
+      color: #64748b; font-size: 13.5px; font-weight: 500;
+      cursor: pointer; transition: all 0.15s;
+      text-decoration: none;
+    }
+    .nav-item svg { width: 17px; height: 17px; flex-shrink: 0; }
+    .nav-item:hover { background: rgba(255,255,255,0.05); color: #cbd5e1; }
+    .nav-item.active { background: rgba(37,99,235,0.18); color: #60a5fa; }
+
+    .sb-footer { padding: 14px 12px; border-top: 1px solid rgba(255,255,255,0.06); }
+    .user-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 12px; margin-bottom: 2px;
+    }
+    .user-avatar {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, #2563eb, #7c3aed);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 800; color: white;
+    }
+    .user-name { font-size: 13px; color: #94a3b8; font-weight: 500; }
+    .logout-btn {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px; border-radius: 8px;
+      color: #64748b; font-size: 13.5px;
+      background: none; border: none; cursor: pointer; width: 100%;
+      transition: all 0.15s; font-weight: 500;
+    }
+    .logout-btn svg { width: 16px; height: 16px; }
+    .logout-btn:hover { background: rgba(239,68,68,0.1); color: #f87171; }
+
+    /* ===== MAIN ===== */
+    .main { margin-left: 248px; flex: 1; display: flex; flex-direction: column; }
+
+    .topbar {
+      background: white;
+      border-bottom: 1px solid #e2e8f0;
+      height: 62px;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 32px;
+      position: sticky; top: 0; z-index: 40;
+    }
+    .topbar-left { display: flex; align-items: center; gap: 14px; }
+    .page-title { font-size: 18px; font-weight: 800; color: #0f172a; letter-spacing: -0.3px; }
+    .badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 10px; border-radius: 20px;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.02em;
+    }
+    .badge svg { width: 11px; height: 11px; }
+    .badge-s3 { background: #eff6ff; color: #2563eb; }
+    .badge-local { background: #f0fdf4; color: #16a34a; }
+    .badge-loading { background: #f8fafc; color: #94a3b8; }
+    .topbar-right { display: flex; gap: 8px; }
+    .icon-btn {
+      width: 36px; height: 36px;
+      border: 1.5px solid #e2e8f0; border-radius: 8px;
+      background: white; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      color: #64748b; transition: all 0.15s;
+    }
+    .icon-btn svg { width: 15px; height: 15px; }
+    .icon-btn:hover { border-color: #2563eb; color: #2563eb; background: #eff6ff; }
+    .icon-btn.spinning svg { animation: spin 0.7s linear infinite; }
+
+    /* ===== CONTENT ===== */
+    .content { padding: 28px 32px; display: flex; flex-direction: column; gap: 22px; flex: 1; min-height: 0; }
+
+    .card { background: white; border-radius: 14px; border: 1px solid #e2e8f0; overflow: hidden; display: flex; flex-direction: column; flex: 1; min-height: 0; }
+    .card-header {
+      padding: 18px 24px;
+      border-bottom: 1px solid #f1f5f9;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .card-header-left { display: flex; align-items: center; gap: 12px; }
+    .card-icon {
+      width: 36px; height: 36px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .card-icon svg { width: 17px; height: 17px; }
+    .card-icon-blue { background: #eff6ff; color: #2563eb; }
+    .card-icon-green { background: #f0fdf4; color: #16a34a; }
+    .card-title { font-size: 15px; font-weight: 700; color: #0f172a; }
+    .card-sub { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+    .card-body { padding: 24px; }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 8px 14px; border-radius: 8px;
+      font-size: 13px; font-weight: 600; cursor: pointer; border: none;
+      transition: all 0.15s; white-space: nowrap; line-height: 1;
+    }
+    .btn svg { width: 13px; height: 13px; flex-shrink: 0; }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-primary { background: #2563eb; color: white; }
+    .btn-primary:hover:not(:disabled) { background: #1d4ed8; box-shadow: 0 3px 10px rgba(37,99,235,0.3); }
+    .btn-success { background: #16a34a; color: white; }
+    .btn-success:hover:not(:disabled) { background: #15803d; box-shadow: 0 3px 10px rgba(22,163,74,0.3); }
+    .btn-danger-outline { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+    .btn-danger-outline:hover:not(:disabled) { background: #fee2e2; }
+    .btn-ghost { background: #f8fafc; color: #475569; border: 1.5px solid #e2e8f0; }
+    .btn-ghost:hover:not(:disabled) { background: #f1f5f9; border-color: #cbd5e1; color: #0f172a; }
+
+    /* Search bar */
+    .card-search {
+      padding: 12px 24px; border-bottom: 1px solid #f1f5f9;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .search-wrap { position: relative; }
+    .search-wrap input {
+      width: 280px; padding: 8px 12px 8px 36px;
+      border: 1.5px solid #e2e8f0; border-radius: 8px;
+      font-size: 13px; color: #0f172a; background: #f8fafc; outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .search-wrap input:focus { border-color: #2563eb; background: white; box-shadow: 0 0 0 3px rgba(37,99,235,0.08); }
+    .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #94a3b8; pointer-events: none; line-height: 0; }
+    .search-icon svg { width: 15px; height: 15px; }
+    .count-label { font-size: 13px; color: #94a3b8; margin-left: auto; font-weight: 500; }
+    .clear-btn { background: none; border: none; cursor: pointer; color: #94a3b8; line-height: 0; padding: 2px; display: none; }
+    .clear-btn:hover { color: #475569; }
+    .clear-btn svg { width: 14px; height: 14px; }
+
+    /* Table */
+    .table-wrap { overflow-x: auto; overflow-y: auto; flex: 1; min-height: 0; }
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      text-align: left; padding: 11px 18px;
+      font-size: 11px; font-weight: 700; color: #94a3b8;
+      text-transform: uppercase; letter-spacing: 0.07em;
+      background: #f8fafc; border-bottom: 1px solid #e2e8f0;
+      position: sticky; top: 0; z-index: 5;
+    }
+    tbody td { padding: 13px 18px; font-size: 14px; color: #1e293b; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: #fafbfd; }
+    tbody tr.row-editing td { background: #f0f7ff; }
+    tbody tr.row-new td { background: #f0fdf4; border-top: 2px dashed #86efac; }
+
+    .row-num { font-size: 12px; color: #cbd5e1; font-weight: 600; }
+    .type-tag {
+      display: inline-flex; align-items: center;
+      padding: 4px 10px; background: #f1f5f9; border-radius: 6px;
+      font-size: 13px; font-weight: 700; color: #334155;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+    .type-tag mark { background: #fef08a; color: #854d0e; border-radius: 2px; padding: 0 1px; }
+    .num { font-size: 15px; font-weight: 700; color: #0f172a; }
+    .num-unit { font-size: 12px; font-weight: 400; color: #94a3b8; margin-left: 3px; }
+
+    .tbl-input {
+      padding: 7px 10px; border: 1.5px solid #93c5fd; border-radius: 8px;
+      font-size: 14px; font-weight: 600; color: #0f172a; background: white;
+      outline: none; width: 130px;
+    }
+    .tbl-input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+    .tbl-input-key { width: 120px; font-weight: 700; text-transform: lowercase; }
+
+    .action-group { display: flex; gap: 6px; align-items: center; }
+
+    .empty-state { text-align: center; padding: 52px 20px; }
+    .empty-state svg { width: 44px; height: 44px; color: #cbd5e1; margin: 0 auto 14px; display: block; }
+    .empty-state .em-title { font-size: 15px; font-weight: 600; color: #64748b; margin-bottom: 4px; }
+    .empty-state .em-sub { font-size: 13px; color: #94a3b8; }
+
+    /* Toast */
+    #toasts {
+      position: fixed; top: 20px; right: 20px; z-index: 9999;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .toast {
+      display: flex; align-items: center; gap: 12px;
+      padding: 13px 16px; border-radius: 12px;
+      font-size: 14px; font-weight: 500;
+      min-width: 270px; max-width: 380px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+      animation: tIn 0.25s ease;
+    }
+    .toast svg { width: 17px; height: 17px; flex-shrink: 0; }
+    .toast-msg { flex: 1; }
+    .t-success { background: #f0fdf4; border: 1px solid #86efac; color: #15803d; }
+    .t-error { background: #fef2f2; border: 1px solid #fca5a5; color: #b91c1c; }
+    .t-info { background: #f0f9ff; border: 1px solid #7dd3fc; color: #0369a1; }
+    @keyframes tIn { from { opacity:0; transform:translateX(16px); } to { opacity:1; transform:translateX(0); } }
+    @keyframes tOut { to { opacity:0; transform:translateX(16px); } }
+
+    /* Modal */
+    .modal-bg {
+      display: none; position: fixed; inset: 0;
+      background: rgba(15,23,42,0.55); z-index: 200;
+      align-items: center; justify-content: center;
+    }
+    .modal-bg.show { display: flex; }
+    .modal {
+      background: white; border-radius: 16px; padding: 32px;
+      width: 100%; max-width: 380px;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.2);
+      animation: tIn 0.2s ease;
+    }
+    .modal h3 { font-size: 18px; font-weight: 800; color: #0f172a; margin-bottom: 8px; }
+    .modal p { font-size: 14px; color: #64748b; margin-bottom: 24px; line-height: 1.6; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<!-- Toasts -->
+<div id="toasts"></div>
+
+<!-- Delete modal -->
+<div class="modal-bg" id="modalDel">
+  <div class="modal">
+    <h3>ยืนยันการลบ</h3>
+    <p>ต้องการลบ Payment Limit ประเภท <strong id="modalDelName"></strong> ใช่หรือไม่?<br/>การกระทำนี้จะบันทึกทันที</p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">ยกเลิก</button>
+      <button class="btn" style="background:#ef4444;color:white" onclick="confirmDel()">ลบ</button>
+    </div>
+  </div>
+</div>
+
+<!-- Sidebar -->
+<div class="sidebar">
+  <div class="sb-logo">
+    <div class="sb-logo-icon">
+      <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>
+    </div>
+    <div>
+      <div class="sb-logo-text">Payment Admin</div>
+      <div class="sb-logo-sub">Management System</div>
+    </div>
+  </div>
+
+  <div class="sb-nav">
+    <div class="sb-section-label">เมนูหลัก</div>
+    <a class="nav-item active" href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+      </svg>
+      Payment Limits
+    </a>
+  </div>
+
+  <div class="sb-footer">
+    <div class="user-row">
+      <div class="user-avatar" id="uAvatar">A</div>
+      <div class="user-name" id="uName">Admin</div>
+    </div>
+    <button class="logout-btn" onclick="logout()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+        <polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+      </svg>
+      ออกจากระบบ
+    </button>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="page-title">Payment Limits</div>
+      <div class="badge badge-loading" id="storageBadge">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+          <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+        </svg>
+        <span id="storageLabel">กำลังเชื่อมต่อ...</span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <button class="icon-btn" id="refreshBtn" onclick="loadData()" title="รีเฟรชข้อมูล">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- Limits card -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-header-left">
+          <div class="card-icon card-icon-blue">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="1" x2="12" y2="23"/>
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+            </svg>
+          </div>
+          <div>
+            <div class="card-title">ตั้งค่า Payment Limits</div>
+            <div class="card-sub">จัดการวงเงินขั้นต่ำและสูงสุดสำหรับแต่ละประเภท</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-ghost" onclick="document.getElementById('importInput').click()" title="นำเข้าไฟล์ JSON แทนที่ข้อมูลทั้งหมด">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            นำเข้า JSON
+          </button>
+          <input type="file" id="importInput" accept=".json" style="display:none" onchange="handleImport(event)" />
+          <button class="btn btn-primary" onclick="startAddRow()" id="addBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            เพิ่มประเภทใหม่
+          </button>
+        </div>
+      </div>
+      <div class="card-search">
+        <div class="search-wrap">
+          <span class="search-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+          </span>
+          <input type="text" id="searchInput" placeholder="ค้นหาประเภทการชำระ..." oninput="onSearch(this)" />
+        </div>
+        <button class="clear-btn" id="clearSearch" onclick="clearSearch()" title="ล้างการค้นหา">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+        <span class="count-label" id="countLabel"></span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:48px">#</th>
+              <th>ประเภท</th>
+              <th>ขั้นต่ำ (Min)</th>
+              <th>สูงสุด (Max)</th>
+              <th style="width:210px">การจัดการ</th>
+            </tr>
+          </thead>
+          <tbody id="tBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<script>
+  const token = localStorage.getItem('pl_token');
+  if (!token) location.href = '/';
+
+  // === user info ===
+  const uname = localStorage.getItem('pl_user') || 'admin';
+  document.getElementById('uName').textContent = uname;
+  document.getElementById('uAvatar').textContent = uname.charAt(0).toUpperCase();
+
+  // === state ===
+  let limitsData = {};
+  let editKey = null;
+  let addingNew = false;
+  let delKey = null;
+  let filterText = '';
+
+  // === auth headers ===
+  function authH(extra) {
+    return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token, ...extra };
+  }
+
+  async function apiFetch(url, opts) {
+    const res = await fetch(url, { ...opts, headers: { ...authH(), ...(opts?.headers || {}) } });
+    if (res.status === 401) { localStorage.removeItem('pl_token'); location.href = '/'; return null; }
+    return res;
+  }
+
+  // === toast ===
+  const ICONS = {
+    success: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>',
+    error: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+    info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r=".5" fill="currentColor"/></svg>'
+  };
+  function toast(msg, type = 'info') {
+    const el = document.createElement('div');
+    el.className = `toast t-${type}`;
+    el.innerHTML = `${ICONS[type] || ICONS.info}<span class="toast-msg">${msg}</span>`;
+    document.getElementById('toasts').appendChild(el);
+    setTimeout(() => { el.style.animation = 'tOut 0.25s ease forwards'; setTimeout(() => el.remove(), 250); }, 3200);
+  }
+
+  // === health / storage badge ===
+  async function loadHealth() {
+    try {
+      const res = await fetch('/health');
+      if (!res.ok) return;
+      const json = await res.json();
+      const badge = document.getElementById('storageBadge');
+      const label = document.getElementById('storageLabel');
+      if (json.storage === 's3') {
+        badge.className = 'badge badge-s3';
+        label.textContent = 'AWS S3';
+      } else {
+        badge.className = 'badge badge-local';
+        label.textContent = 'Local Storage';
+      }
+    } catch {}
+  }
+
+  // === load data ===
+  async function loadData() {
+    const btn = document.getElementById('refreshBtn');
+    btn.classList.add('spinning');
+    try {
+      const res = await apiFetch('/api/get-payment-limits');
+      if (!res) return;
+      if (res.ok) {
+        const json = await res.json();
+        limitsData = json.data?.paymentLimits || {};
+        renderTable();
+        toast('โหลดข้อมูลสำเร็จ', 'success');
+      } else if (res.status === 404) {
+        limitsData = {};
+        renderTable();
+        toast('ยังไม่มีข้อมูล Payment Limits', 'info');
+      } else {
+        const err = await res.json();
+        toast(err.error || 'โหลดข้อมูลไม่สำเร็จ', 'error');
+      }
+    } catch { toast('ไม่สามารถเชื่อมต่อ Server ได้', 'error'); }
+    finally { btn.classList.remove('spinning'); }
+  }
+
+  // === search ===
+  function onSearch(inp) {
+    filterText = inp.value.toLowerCase().trim();
+    document.getElementById('clearSearch').style.display = filterText ? 'inline-flex' : 'none';
+    renderTable();
+  }
+  function clearSearch() {
+    filterText = '';
+    document.getElementById('searchInput').value = '';
+    document.getElementById('clearSearch').style.display = 'none';
+    renderTable();
+    document.getElementById('searchInput').focus();
+  }
+
+  // === render ===
+  function fmt(n) { return Number(n).toLocaleString('th-TH'); }
+
+  function highlight(text) {
+    if (!filterText) return text;
+    const idx = text.toLowerCase().indexOf(filterText);
+    if (idx === -1) return text;
+    return text.slice(0, idx) + '<mark>' + text.slice(idx, idx + filterText.length) + '</mark>' + text.slice(idx + filterText.length);
+  }
+
+  function renderTable() {
+    const tbody = document.getElementById('tBody');
+    const allKeys = Object.keys(limitsData);
+    const keys = filterText ? allKeys.filter(k => k.toLowerCase().includes(filterText)) : allKeys;
+
+    const countEl = document.getElementById('countLabel');
+    if (countEl) {
+      countEl.textContent = filterText
+        ? `พบ ${keys.length} / ${allKeys.length} รายการ`
+        : `ทั้งหมด ${allKeys.length} รายการ`;
+    }
+
+    let html = '';
+
+    if (!keys.length && !addingNew) {
+      const emTitle = filterText ? `ไม่พบ "${filterText}"` : 'ยังไม่มีข้อมูล Payment Limits';
+      const emSub = filterText ? 'ลองค้นหาด้วยคำอื่น' : 'กด "เพิ่มประเภทใหม่" เพื่อเริ่มต้นใช้งาน';
+      html = `<tr><td colspan="5">
+        <div class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <div class="em-title">${emTitle}</div>
+          <div class="em-sub">${emSub}</div>
+        </div>
+      </td></tr>`;
+    } else {
+      keys.forEach(key => {
+        const { min, max } = limitsData[key];
+        const rowNum = allKeys.indexOf(key) + 1;
+        const tagHtml = `<span class="type-tag">${highlight(key)}</span>`;
+        if (editKey === key) {
+          html += `<tr class="row-editing">
+            <td class="row-num">${rowNum}</td>
+            <td>${tagHtml}</td>
+            <td><input class="tbl-input" type="number" id="eMin" value="${min}" min="0" placeholder="min" /></td>
+            <td><input class="tbl-input" type="number" id="eMax" value="${max}" min="0" placeholder="max" /></td>
+            <td>
+              <div class="action-group">
+                <button class="btn btn-success" onclick="saveEdit('${key}')">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                  บันทึก
+                </button>
+                <button class="btn btn-ghost" onclick="cancelEdit()">ยกเลิก</button>
+              </div>
+            </td>
+          </tr>`;
+        } else {
+          html += `<tr>
+            <td class="row-num">${rowNum}</td>
+            <td>${tagHtml}</td>
+            <td><span class="num">${fmt(min)}<span class="num-unit">บาท</span></span></td>
+            <td><span class="num">${fmt(max)}<span class="num-unit">บาท</span></span></td>
+            <td>
+              <div class="action-group">
+                <button class="btn btn-ghost" onclick="startEdit('${key}')">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                  แก้ไข
+                </button>
+                <button class="btn btn-danger-outline" onclick="openDelModal('${key}')">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                    <path d="M10 11v6M14 11v6"/>
+                    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                  </svg>
+                  ลบ
+                </button>
+              </div>
+            </td>
+          </tr>`;
+        }
+      });
+    }
+
+    if (addingNew) {
+      html += `<tr class="row-new">
+        <td class="row-num">—</td>
+        <td><input class="tbl-input tbl-input-key" type="text" id="nKey" placeholder="เช่น qr, mypay..." /></td>
+        <td><input class="tbl-input" type="number" id="nMin" placeholder="min" min="0" /></td>
+        <td><input class="tbl-input" type="number" id="nMax" placeholder="max" min="0" /></td>
+        <td>
+          <div class="action-group">
+            <button class="btn btn-success" onclick="saveNew()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              บันทึก
+            </button>
+            <button class="btn btn-ghost" onclick="cancelAdd()">ยกเลิก</button>
+          </div>
+        </td>
+      </tr>`;
+      setTimeout(() => document.getElementById('nKey')?.focus(), 30);
+    }
+
+    tbody.innerHTML = html;
+    if (editKey) setTimeout(() => document.getElementById('eMin')?.focus(), 30);
+  }
+
+  // === edit ===
+  function startEdit(key) { editKey = key; addingNew = false; renderTable(); }
+  function cancelEdit() { editKey = null; renderTable(); }
+
+  async function saveEdit(key) {
+    const minV = Number(document.getElementById('eMin').value);
+    const maxV = Number(document.getElementById('eMax').value);
+    if (!validateMinMax(minV, maxV)) return;
+    limitsData[key] = { min: minV, max: maxV };
+    editKey = null;
+    await saveAll();
+  }
+
+  // === add ===
+  // === import JSON file ===
+  async function handleImport(event) {
+    const file = event.target.files[0];
+    event.target.value = '';
+    if (!file) return;
+
+    let json;
+    try {
+      const text = await file.text();
+      json = JSON.parse(text);
+    } catch {
+      toast('ไฟล์ JSON ไม่ถูกต้อง', 'error');
+      return;
+    }
+
+    if (!json.paymentLimits || typeof json.paymentLimits !== 'object') {
+      toast('โครงสร้างไฟล์ไม่ถูกต้อง: ต้องมี paymentLimits', 'error');
+      return;
+    }
+
+    const count = Object.keys(json.paymentLimits).length;
+    if (!confirm(`นำเข้าข้อมูล ${count} รายการ?\nจะแทนที่ข้อมูลปัจจุบันทั้งหมด`)) return;
+
+    limitsData = json.paymentLimits;
+    filterText = '';
+    document.getElementById('searchInput').value = '';
+    document.getElementById('clearSearch').style.display = 'none';
+    await saveAll();
+  }
+
+  function startAddRow() { addingNew = true; editKey = null; renderTable(); }
+  function cancelAdd() { addingNew = false; renderTable(); }
+
+  async function saveNew() {
+    const keyV = (document.getElementById('nKey').value || '').trim();
+    const minV = parseFloat(document.getElementById('nMin').value);
+    const maxV = parseFloat(document.getElementById('nMax').value);
+
+    if (!keyV) { toast('กรุณาระบุชื่อประเภท', 'error'); return; }
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9_]*$/.test(keyV)) { toast('ชื่อต้องขึ้นด้วยตัวอักษรหรือตัวเลข ใช้ได้เฉพาะ A-Z a-z 0-9 _', 'error'); return; }
+    if (limitsData[keyV] !== undefined) { toast(`ประเภท "${keyV}" มีอยู่แล้ว`, 'error'); return; }
+    if (isNaN(minV) || isNaN(maxV)) { toast('กรุณากรอกค่า min และ max', 'error'); return; }
+    if (!validateMinMax(minV, maxV)) return;
+
+    limitsData[keyV] = { min: minV, max: maxV };
+    addingNew = false;
+    await saveAll();
+  }
+
+  // === delete ===
+  function openDelModal(key) {
+    delKey = key;
+    document.getElementById('modalDelName').textContent = key;
+    document.getElementById('modalDel').classList.add('show');
+  }
+  function closeModal() {
+    delKey = null;
+    document.getElementById('modalDel').classList.remove('show');
+  }
+  async function confirmDel() {
+    if (!delKey) return;
+    delete limitsData[delKey];
+    closeModal();
+    await saveAll();
+  }
+
+  // === validation ===
+  function validateMinMax(minV, maxV) {
+    if (isNaN(minV) || isNaN(maxV)) { toast('กรุณากรอกตัวเลขให้ถูกต้อง', 'error'); return false; }
+    if (minV < 0 || maxV < 0) { toast('ค่าไม่สามารถติดลบได้', 'error'); return false; }
+    if (maxV <= minV) { toast('ค่าสูงสุดต้องมากกว่าค่าขั้นต่ำ', 'error'); return false; }
+    return true;
+  }
+
+  // === save all ===
+  async function saveAll() {
+    try {
+      const res = await apiFetch('/api/update-payment-limits', {
+        method: 'POST',
+        body: JSON.stringify({ data: { paymentLimits: limitsData } })
+      });
+      if (!res) return;
+      if (res.ok) {
+        renderTable();
+        toast('บันทึกสำเร็จ', 'success');
+      } else {
+        const err = await res.json();
+        toast(err.error || 'บันทึกไม่สำเร็จ', 'error');
+        loadData();
+      }
+    } catch { toast('ไม่สามารถเชื่อมต่อ Server ได้', 'error'); loadData(); }
+  }
+
+  // === logout ===
+  async function logout() {
+    try { await fetch('/api/logout', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } }); } catch {}
+    localStorage.removeItem('pl_token');
+    localStorage.removeItem('pl_user');
+    location.href = '/';
+  }
+
+  // === init ===
+  (async () => { await loadHealth(); await loadData(); })();
+</script>
+</body>
+</html>

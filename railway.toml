@@ -1,0 +1,7 @@
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "node backend-s3-upload.js"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10

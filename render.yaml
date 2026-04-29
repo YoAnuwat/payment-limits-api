@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: payment-limits-admin
+    env: node
+    buildCommand: npm install
+    startCommand: node backend-s3-upload.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: STORAGE_MODE
+        value: s3
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_REGION
+        value: ap-southeast-1
+      - key: S3_BUCKET_NAME
+        sync: false
+      - key: CURRENT_PAYMENT_LIMITS_KEY
+        value: paymentLimitsCTM.json
+      - key: PAYMENT_LIMITS_UPLOAD_PREFIX
+        value: payment-limits
+      - key: MAX_UPLOAD_SIZE_MB
+        value: "5"

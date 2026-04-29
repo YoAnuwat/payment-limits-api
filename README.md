@@ -1,93 +1,231 @@
-# payment-limits-api
+# Payment Limits Management System
 
+ระบบจัดการ Payment Limits พร้อม Dashboard UI ในตัว
 
+## Features
 
-## Getting started
+- จัดการ Payment Limits (เพิ่ม, แก้ไข, ลบ)
+- ระบบ Login/Logout
+- รองรับ Local Storage หรือ AWS S3
+- Dashboard UI ในตัว (ไม่ต้องติดตั้ง Frontend แยก)
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+## Project Structure
 
 ```
-cd existing_repo
-git remote add origin https://gitlab.meyacrew.com/Develop07/payment-limits-api.git
-git branch -M main
-git push -uf origin main
+payment-limits/
+├── backend-s3-upload.js    # Main server (Express.js)
+├── public/
+│   ├── index.html          # หน้า Login
+│   └── dashboard.html      # หน้า Dashboard จัดการ Payment Limits
+├── .local-storage/         # โฟลเดอร์เก็บข้อมูล (Local mode)
+│   └── paymentLimitsCTM.json
+├── .env                    # Environment variables
+├── .env.example            # ตัวอย่าง Environment variables
+├── package.json            # Dependencies
+├── render.yaml             # Config สำหรับ Deploy บน Render
+├── railway.toml            # Config สำหรับ Deploy บน Railway
+└── README.md
 ```
 
-## Integrate with your tools
+## การติดตั้ง
 
-- [ ] [Set up project integrations](https://gitlab.meyacrew.com/Develop07/payment-limits-api/-/settings/integrations)
+### 1. ติดตั้ง Dependencies
 
-## Collaborate with your team
+```bash
+npm install
+```
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+### 2. ตั้งค่า Environment Variables
 
-## Test and Deploy
+```bash
+cp .env.example .env
+```
 
-Use the built-in continuous integration in GitLab.
+แก้ไขไฟล์ `.env`:
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+```env
+# Storage Mode: local หรือ s3 หรือ auto
+STORAGE_MODE=local
+LOCAL_STORAGE_DIR=.local-storage
 
-***
+# ถ้าใช้ S3 (optional)
+# AWS_ACCESS_KEY_ID=your_access_key
+# AWS_SECRET_ACCESS_KEY=your_secret_key
+# AWS_REGION=ap-southeast-1
+# S3_BUCKET_NAME=your-bucket-name
 
-# Editing this README
+# Payment Limits Config
+CURRENT_PAYMENT_LIMITS_KEY=paymentLimitsCTM.json
+MAX_UPLOAD_SIZE_MB=5
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+# Admin Credentials
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=changeme123
 
-## Suggestions for a good README
+# Server
+PORT=3001
+ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
+```
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+### 3. รันเซิร์ฟเวอร์
 
-## Name
-Choose a self-explaining name for your project.
+```bash
+# Development (auto-reload)
+npm run dev
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+# Production
+npm start
+```
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+### 4. เข้าใช้งาน
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+เปิด Browser ไปที่ `http://localhost:3001`
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+Login ด้วย:
+- Username: `admin` (หรือตามที่ตั้งใน .env)
+- Password: `changeme123` (หรือตามที่ตั้งใน .env)
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+## API Endpoints
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+### Authentication
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+#### POST /api/login
+Login เข้าสู่ระบบ
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+```bash
+curl -X POST http://localhost:3001/api/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"changeme123"}'
+```
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+**Response:**
+```json
+{
+  "token": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+  "username": "admin"
+}
+```
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+#### POST /api/logout
+Logout ออกจากระบบ
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+```bash
+curl -X POST http://localhost:3001/api/logout \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Payment Limits
+
+#### GET /api/get-payment-limits
+ดึงข้อมูล Payment Limits ทั้งหมด
+
+```bash
+curl http://localhost:3001/api/get-payment-limits \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "paymentLimits": {
+      "p2p": { "min": 100, "max": 200000 },
+      "qr": { "min": 1, "max": 50000 }
+    }
+  }
+}
+```
+
+#### POST /api/update-payment-limits
+อัพเดท Payment Limits (เพิ่ม/แก้ไข/ลบ)
+
+```bash
+curl -X POST http://localhost:3001/api/update-payment-limits \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "data": {
+      "paymentLimits": {
+        "p2p": { "min": 100, "max": 200000 },
+        "qr": { "min": 1, "max": 50000 },
+        "newType": { "min": 500, "max": 100000 }
+      }
+    }
+  }'
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "อัพเดทข้อมูลสำเร็จ",
+  "data": {
+    "location": "file://.local-storage/paymentLimitsCTM.json",
+    "key": "paymentLimitsCTM.json",
+    "bucket": "local",
+    "lastModified": "2026-04-28T13:30:00.000Z"
+  }
+}
+```
+
+### Health Check
+
+#### GET /health
+ตรวจสอบสถานะ Server
+
+```bash
+curl http://localhost:3001/health
+```
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "service": "payment-limits-s3-backend",
+  "storage": "local"
+}
+```
+
+## Storage Modes
+
+| Mode | คำอธิบาย |
+|------|----------|
+| `local` | เก็บข้อมูลในโฟลเดอร์ `.local-storage` |
+| `s3` | เก็บข้อมูลใน AWS S3 (ต้องตั้งค่า AWS credentials) |
+| `auto` | ใช้ S3 ถ้ามี AWS credentials, ไม่งั้นใช้ local |
+
+## Deployment
+
+### ใช้ PM2 (Production)
+
+```bash
+npm install -g pm2
+pm2 start backend-s3-upload.js --name payment-limits-api
+pm2 save
+pm2 startup
+```
+
+### Docker (Optional)
+
+```dockerfile
+FROM node:18-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production
+COPY . .
+EXPOSE 3001
+CMD ["npm", "start"]
+```
+
+## Troubleshooting
+
+| ปัญหา | วิธีแก้ |
+|-------|--------|
+| Connection refused | ตรวจสอบว่า Server รันอยู่ และ PORT ถูกต้อง |
+| 401 Unauthorized | Token หมดอายุ หรือไม่ถูกต้อง ให้ Login ใหม่ |
+| CORS error | เพิ่ม URL ใน `ALLOWED_ORIGINS` |
 
 ## License
-For open source projects, say how it is licensed.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+MIT

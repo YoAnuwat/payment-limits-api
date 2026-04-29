@@ -93,9 +93,13 @@ async function initDb() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS payment_limits (
       key TEXT PRIMARY KEY,
-      data TEXT NOT NULL,
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )
+  `);
+  await pool.query(`
+    ALTER TABLE payment_limits
+      ADD COLUMN IF NOT EXISTS data TEXT,
+      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()
   `);
 }
 

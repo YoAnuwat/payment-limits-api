@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 const crypto = require('crypto');
+const { Pool } = require('pg');
 
 const app = express();
 const MAX_UPLOAD_SIZE_MB = Number(process.env.MAX_UPLOAD_SIZE_MB || 5);
@@ -40,19 +41,36 @@ const hasAwsConfig =
   hasRealValue(process.env.AWS_SECRET_ACCESS_KEY) &&
   hasRealValue(process.env.S3_BUCKET_NAME);
 
+const hasDatabaseUrl = hasRealValue(process.env.DATABASE_URL);
+
 let useS3 = false;
+let usePostgres = false;
+
 if (STORAGE_MODE === 's3') {
   if (!hasAwsConfig) {
     throw new Error('STORAGE_MODE=s3 requires valid AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and S3_BUCKET_NAME');
   }
   useS3 = true;
+} else if (STORAGE_MODE === 'postgres') {
+  if (!hasDatabaseUrl) {
+    throw new Error('STORAGE_MODE=postgres requires valid DATABASE_URL');
+  }
+  usePostgres = true;
 } else if (STORAGE_MODE === 'local') {
   useS3 = false;
+  usePostgres = false;
 } else {
-  useS3 = hasAwsConfig;
+  // auto: postgres > s3 > local
+  if (hasDatabaseUrl) {
+    usePostgres = true;
+  } else {
+    useS3 = hasAwsConfig;
+  }
 }
 
 let s3 = null;
+let pool = null;
+
 if (useS3) {
   AWS.config.update({
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
@@ -60,8 +78,25 @@ if (useS3) {
     region: process.env.AWS_REGION || 'ap-southeast-1'
   });
   s3 = new AWS.S3();
+} else if (usePostgres) {
+  const isInternal = process.env.DATABASE_URL && process.env.DATABASE_URL.includes('railway.internal');
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: isInternal ? false : { rejectUnauthorized: false }
+  });
 } else {
   fs.mkdirSync(LOCAL_STORAGE_DIR, { recursive: true });
+}
+
+async function initDb() {
+  if (!usePostgres) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS payment_limits (
+      key TEXT PRIMARY KEY,
+      data TEXT NOT NULL,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
 }
 
 // Public JSON endpoint — no auth, open CORS (replaces CloudFront)
@@ -97,6 +132,7 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
 function isJsonFile(file) {
   if (!file || !file.originalname) {
     return false;
@@ -108,6 +144,7 @@ function parseJsonOrThrow(buffer) {
   const raw = buffer.toString();
   return JSON.parse(raw);
 }
+
 function sanitizeFileName(name) {
   return path.basename(name).replace(/[^a-zA-Z0-9._-]/g, '_');
 }
@@ -129,6 +166,17 @@ async function uploadObject({ key, body, contentType = 'application/json' }) {
     };
   }
 
+  if (usePostgres) {
+    const dataStr = Buffer.isBuffer(body) ? body.toString() : String(body);
+    await pool.query(
+      `INSERT INTO payment_limits (key, data, updated_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (key) DO UPDATE SET data = $2, updated_at = NOW()`,
+      [key, dataStr]
+    );
+    return { location: `postgres://${key}`, key, bucket: 'postgres' };
+  }
+
   const outputPath = path.join(LOCAL_STORAGE_DIR, key);
   await fs.promises.mkdir(path.dirname(outputPath), { recursive: true });
   const dataBuffer = Buffer.isBuffer(body) ? body : Buffer.from(String(body));
@@ -148,6 +196,16 @@ async function getObject(key) {
       Key: key
     }).promise();
     return result.Body;
+  }
+
+  if (usePostgres) {
+    const result = await pool.query('SELECT data FROM payment_limits WHERE key = $1', [key]);
+    if (result.rows.length === 0) {
+      const err = new Error('NoSuchKey');
+      err.code = 'NoSuchKey';
+      throw err;
+    }
+    return Buffer.from(result.rows[0].data);
   }
 
   const inputPath = path.join(LOCAL_STORAGE_DIR, key);
@@ -208,11 +266,8 @@ app.post('/api/logout', (req, res) => {
 });
 
 app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'payment-limits-s3-backend',
-    storage: useS3 ? 's3' : 'local'
-  });
+  const storage = useS3 ? 's3' : usePostgres ? 'postgres' : 'local';
+  res.json({ status: 'ok', service: 'payment-limits-s3-backend', storage });
 });
 
 // Endpoint สำหรับอัพโหลด JSON file
@@ -222,12 +277,10 @@ app.post('/api/upload-payment-limits', requireAuth, upload.single('file'), async
       return res.status(400).json({ error: 'ไม่พบไฟล์ที่อัพโหลด' });
     }
 
-    // ตรวจสอบว่าเป็นไฟล์ JSON
     if (!isJsonFile(req.file)) {
       return res.status(400).json({ error: 'กรุณาอัพโหลดไฟล์ .json เท่านั้น' });
     }
 
-    // Validate JSON format
     try {
       parseJsonOrThrow(req.file.buffer);
     } catch (error) {
@@ -257,10 +310,10 @@ app.post('/api/upload-payment-limits', requireAuth, upload.single('file'), async
         error: `ไฟล์ใหญ่เกินไป (สูงสุด ${MAX_UPLOAD_SIZE_MB} MB)`
       });
     }
-    console.error('Error uploading to S3:', error);
-    res.status(500).json({ 
+    console.error('Error uploading:', error);
+    res.status(500).json({
       error: 'เกิดข้อผิดพลาดในการอัพโหลด',
-      details: error.message 
+      details: error.message
     });
   }
 });
@@ -274,13 +327,12 @@ app.post('/api/update-payment-limits', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'ไม่พบข้อมูลที่จะอัพเดท' });
     }
 
-    // Validate JSON structure
     const validationError = validatePaymentLimitsData(data);
     if (validationError) {
       return res.status(400).json({ error: validationError });
     }
 
-    const fileName = PAYMENT_LIMITS_KEY; // ชื่อไฟล์คงที่
+    const fileName = PAYMENT_LIMITS_KEY;
     const result = await uploadObject({
       key: fileName,
       body: JSON.stringify(data, null, 2),
@@ -299,15 +351,15 @@ app.post('/api/update-payment-limits', requireAuth, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error updating S3:', error);
-    res.status(500).json({ 
+    console.error('Error updating:', error);
+    res.status(500).json({
       error: 'เกิดข้อผิดพลาดในการอัพเดท',
-      details: error.message 
+      details: error.message
     });
   }
 });
 
-// Endpoint สำหรับดึงข้อมูลจาก S3
+// Endpoint สำหรับดึงข้อมูล
 app.get('/api/get-payment-limits', requireAuth, async (req, res) => {
   try {
     const data = await getObject(PAYMENT_LIMITS_KEY);
@@ -324,10 +376,10 @@ app.get('/api/get-payment-limits', requireAuth, async (req, res) => {
         error: 'ไม่พบไฟล์ payment limits'
       });
     }
-    console.error('Error getting from S3:', error);
-    res.status(500).json({ 
+    console.error('Error getting data:', error);
+    res.status(500).json({
       error: 'เกิดข้อผิดพลาดในการดึงข้อมูล',
-      details: error.message 
+      details: error.message
     });
   }
 });
@@ -347,6 +399,16 @@ app.use((error, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+
+async function start() {
+  await initDb();
+  app.listen(PORT, () => {
+    const storage = useS3 ? 's3' : usePostgres ? 'postgres' : 'local';
+    console.log(`Server is running on port ${PORT} (storage: ${storage})`);
+  });
+}
+
+start().catch((err) => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
 });

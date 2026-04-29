@@ -1,5 +1,6 @@
 [build]
 builder = "NIXPACKS"
+buildCommand = "echo 'no build step'"
 
 [deploy]
 startCommand = "node backend-s3-upload.js"

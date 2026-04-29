@@ -98,9 +98,14 @@ async function initDb() {
   `);
   await pool.query(`
     ALTER TABLE payment_limits
+      ADD COLUMN IF NOT EXISTS key TEXT,
       ADD COLUMN IF NOT EXISTS data TEXT,
       ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()
   `);
+  // ensure unique constraint on key for ON CONFLICT to work on tables created without PRIMARY KEY
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS payment_limits_key_unique ON payment_limits (key)
+  `).catch(() => {});
 }
 
 // Public JSON endpoint — no auth, open CORS (replaces CloudFront)

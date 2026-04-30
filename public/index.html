@@ -1,268 +1,389 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="th">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Payment Limits — เข้าสู่ระบบ</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #0f2047 0%, #1e40af 50%, #2563eb 100%);
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-    }
-    .card {
-      background: white;
-      border-radius: 24px;
-      padding: 48px 40px 40px;
-      width: 100%;
-      max-width: 420px;
-      box-shadow: 0 32px 80px rgba(0, 0, 0, 0.3);
-    }
-    .logo-wrap {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      margin-bottom: 36px;
-    }
-    .logo-box {
-      width: 72px;
-      height: 72px;
-      background: linear-gradient(135deg, #1d4ed8, #3b82f6);
-      border-radius: 20px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 16px;
-      box-shadow: 0 10px 28px rgba(37, 99, 235, 0.35);
-    }
-    .logo-box svg { width: 34px; height: 34px; fill: white; }
-    .app-name { font-size: 22px; font-weight: 800; color: #0f172a; letter-spacing: -0.3px; }
-    .app-sub { font-size: 13px; color: #94a3b8; margin-top: 5px; }
-    .alert {
-      padding: 12px 16px;
-      border-radius: 10px;
-      font-size: 14px;
-      margin-bottom: 20px;
-      display: none;
-      align-items: center;
-      gap: 10px;
-    }
-    .alert svg { width: 16px; height: 16px; flex-shrink: 0; }
-    .alert-error { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; display: none; }
-    .alert-error.show { display: flex; }
-    .form-group { margin-bottom: 18px; }
-    label {
-      display: block;
-      font-size: 12px;
-      font-weight: 700;
-      color: #475569;
-      margin-bottom: 7px;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-    }
-    .input-row { position: relative; }
-    input[type=text], input[type=password] {
-      width: 100%;
-      padding: 12px 42px 12px 14px;
-      border: 1.5px solid #e2e8f0;
-      border-radius: 10px;
-      font-size: 15px;
-      color: #0f172a;
-      background: #f8fafc;
-      outline: none;
-      transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
-    }
-    input[type=text]:focus, input[type=password]:focus {
-      border-color: #2563eb;
-      background: white;
-      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-    }
-    .input-icon {
-      position: absolute;
-      left: 14px;
-      top: 50%;
-      transform: translateY(-50%);
-      color: #cbd5e1;
-    }
-    .input-icon svg { width: 16px; height: 16px; }
-    input[type=text], input[type=password] { padding-left: 42px; }
-    .eye-btn {
-      position: absolute;
-      right: 12px;
-      top: 50%;
-      transform: translateY(-50%);
-      background: none;
-      border: none;
-      cursor: pointer;
-      color: #cbd5e1;
-      padding: 4px;
-      line-height: 0;
-      transition: color 0.15s;
-    }
-    .eye-btn:hover { color: #64748b; }
-    .btn-login {
-      width: 100%;
-      padding: 13px;
-      background: linear-gradient(135deg, #2563eb, #1d4ed8);
-      color: white;
-      border: none;
-      border-radius: 10px;
-      font-size: 15px;
-      font-weight: 700;
-      cursor: pointer;
-      transition: all 0.2s;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      margin-top: 8px;
-      letter-spacing: 0.01em;
-    }
-    .btn-login:hover:not(:disabled) {
-      box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4);
-      transform: translateY(-1px);
-    }
-    .btn-login:active:not(:disabled) { transform: translateY(0); }
-    .btn-login:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; }
-    .spinner {
-      width: 16px; height: 16px;
-      border: 2px solid rgba(255,255,255,0.35);
-      border-top-color: white;
-      border-radius: 50%;
-      animation: spin 0.7s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .divider {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin: 24px 0 0;
-      color: #cbd5e1;
-      font-size: 12px;
-    }
-    .divider::before, .divider::after {
-      content: '';
-      flex: 1;
-      border-top: 1px solid #e2e8f0;
-    }
-    .hint {
-      margin-top: 16px;
-      text-align: center;
-      font-size: 12px;
-      color: #94a3b8;
-    }
-  </style>
-</head>
-<body>
-<div class="card">
-  <div class="logo-wrap">
-    <div class="logo-box">
-      <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>
-    </div>
-    <div class="app-name">Payment Limits Admin</div>
-    <div class="app-sub">ระบบจัดการ Payment Limits</div>
-  </div>
-
-  <div class="alert alert-error" id="errMsg">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r=".5" fill="currentColor"/>
-    </svg>
-    <span id="errText"></span>
-  </div>
-
-  <form id="loginForm">
-    <div class="form-group">
-      <label for="username">Username</label>
-      <div class="input-row">
-        <span class="input-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-        </span>
-        <input type="text" id="username" placeholder="ระบุ username" autocomplete="username" required />
-      </div>
-    </div>
-    <div class="form-group">
-      <label for="password">Password</label>
-      <div class="input-row">
-        <span class="input-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-        </span>
-        <input type="password" id="password" placeholder="ระบุ password" autocomplete="current-password" required />
-        <button type="button" class="eye-btn" onclick="togglePwd()" title="แสดง/ซ่อน password">
-          <svg id="eyeIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
-          </svg>
-        </button>
-      </div>
-    </div>
-    <button type="submit" class="btn-login" id="loginBtn">
-      <span id="btnText">เข้าสู่ระบบ</span>
-    </button>
-  </form>
-
-  <div class="divider">ข้อมูล default</div>
-  <div class="hint">Username: <strong>admin</strong> &nbsp;/&nbsp; Password: <strong>admin123</strong></div>
-</div>
-
-<script>
-  if (localStorage.getItem('pl_token')) {
-    location.href = '/dashboard.html';
-  }
-
-  let pwdVisible = false;
-  function togglePwd() {
-    pwdVisible = !pwdVisible;
-    const inp = document.getElementById('password');
-    inp.type = pwdVisible ? 'text' : 'password';
-  }
-
-  function showErr(msg) {
-    document.getElementById('errText').textContent = msg;
-    document.getElementById('errMsg').classList.add('show');
-  }
-  function hideErr() {
-    document.getElementById('errMsg').classList.remove('show');
-  }
-
-  document.getElementById('loginForm').addEventListener('submit', async e => {
-    e.preventDefault();
-    hideErr();
-    const btn = document.getElementById('loginBtn');
-    const btnText = document.getElementById('btnText');
-    btn.disabled = true;
-    btnText.innerHTML = '';
-    btn.insertAdjacentHTML('afterbegin', '<div class="spinner"></div>');
-    btnText.textContent = 'กำลังเข้าสู่ระบบ...';
-
-    try {
-      const res = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: document.getElementById('username').value.trim(),
-          password: document.getElementById('password').value
-        })
-      });
-      const json = await res.json();
-      if (res.ok && json.token) {
-        localStorage.setItem('pl_token', json.token);
-        localStorage.setItem('pl_user', json.username || 'admin');
-        location.href = '/dashboard.html';
-      } else {
-        showErr(json.error || 'Username หรือ Password ไม่ถูกต้อง');
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Payment Limits — เข้าสู่ระบบ</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
       }
-    } catch {
-      showErr('ไม่สามารถเชื่อมต่อ Server ได้ กรุณาตรวจสอบการเชื่อมต่อ');
-    } finally {
-      btn.disabled = false;
-      btn.querySelector('.spinner')?.remove();
-      btnText.textContent = 'เข้าสู่ระบบ';
-    }
-  });
-</script>
-</body>
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: linear-gradient(
+          135deg,
+          #0f2047 0%,
+          #1e40af 50%,
+          #2563eb 100%
+        );
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+      .card {
+        background: white;
+        border-radius: 24px;
+        padding: 48px 40px 40px;
+        width: 100%;
+        max-width: 420px;
+        box-shadow: 0 32px 80px rgba(0, 0, 0, 0.3);
+      }
+      .logo-wrap {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin-bottom: 36px;
+      }
+      .logo-box {
+        width: 72px;
+        height: 72px;
+        background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+        border-radius: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 16px;
+        box-shadow: 0 10px 28px rgba(37, 99, 235, 0.35);
+      }
+      .logo-box svg {
+        width: 34px;
+        height: 34px;
+        fill: white;
+      }
+      .app-name {
+        font-size: 22px;
+        font-weight: 800;
+        color: #0f172a;
+        letter-spacing: -0.3px;
+      }
+      .app-sub {
+        font-size: 13px;
+        color: #94a3b8;
+        margin-top: 5px;
+      }
+      .alert {
+        padding: 12px 16px;
+        border-radius: 10px;
+        font-size: 14px;
+        margin-bottom: 20px;
+        display: none;
+        align-items: center;
+        gap: 10px;
+      }
+      .alert svg {
+        width: 16px;
+        height: 16px;
+        flex-shrink: 0;
+      }
+      .alert-error {
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        color: #b91c1c;
+        display: none;
+      }
+      .alert-error.show {
+        display: flex;
+      }
+      .form-group {
+        margin-bottom: 18px;
+      }
+      label {
+        display: block;
+        font-size: 12px;
+        font-weight: 700;
+        color: #475569;
+        margin-bottom: 7px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .input-row {
+        position: relative;
+      }
+      input[type="text"],
+      input[type="password"] {
+        width: 100%;
+        padding: 12px 42px 12px 14px;
+        border: 1.5px solid #e2e8f0;
+        border-radius: 10px;
+        font-size: 15px;
+        color: #0f172a;
+        background: #f8fafc;
+        outline: none;
+        transition:
+          border-color 0.15s,
+          box-shadow 0.15s,
+          background 0.15s;
+      }
+      input[type="text"]:focus,
+      input[type="password"]:focus {
+        border-color: #2563eb;
+        background: white;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+      }
+      .input-icon {
+        position: absolute;
+        left: 14px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #cbd5e1;
+      }
+      .input-icon svg {
+        width: 16px;
+        height: 16px;
+      }
+      input[type="text"],
+      input[type="password"] {
+        padding-left: 42px;
+      }
+      .eye-btn {
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: #cbd5e1;
+        padding: 4px;
+        line-height: 0;
+        transition: color 0.15s;
+      }
+      .eye-btn:hover {
+        color: #64748b;
+      }
+      .btn-login {
+        width: 100%;
+        padding: 13px;
+        background: linear-gradient(135deg, #2563eb, #1d4ed8);
+        color: white;
+        border: none;
+        border-radius: 10px;
+        font-size: 15px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        margin-top: 8px;
+        letter-spacing: 0.01em;
+      }
+      .btn-login:hover:not(:disabled) {
+        box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4);
+        transform: translateY(-1px);
+      }
+      .btn-login:active:not(:disabled) {
+        transform: translateY(0);
+      }
+      .btn-login:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
+      .spinner {
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(255, 255, 255, 0.35);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .divider {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 24px 0 0;
+        color: #cbd5e1;
+        font-size: 12px;
+      }
+      .divider::before,
+      .divider::after {
+        content: "";
+        flex: 1;
+        border-top: 1px solid #e2e8f0;
+      }
+      .hint {
+        margin-top: 16px;
+        text-align: center;
+        font-size: 12px;
+        color: #94a3b8;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="logo-wrap">
+        <div class="logo-box">
+          <svg viewBox="0 0 24 24">
+            <path
+              d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"
+            />
+          </svg>
+        </div>
+        <div class="app-name">Payment Limits Admin</div>
+        <div class="app-sub">ระบบจัดการ Payment Limits</div>
+      </div>
+
+      <div class="alert alert-error" id="errMsg">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="8" x2="12" y2="12" />
+          <circle cx="12" cy="16" r=".5" fill="currentColor" />
+        </svg>
+        <span id="errText"></span>
+      </div>
+
+      <form id="loginForm">
+        <div class="form-group">
+          <label for="username">Username</label>
+          <div class="input-row">
+            <span class="input-icon">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            </span>
+            <input
+              type="text"
+              id="username"
+              placeholder="ระบุ username"
+              autocomplete="username"
+              required
+            />
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <div class="input-row">
+            <span class="input-icon">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <rect x="3" y="11" width="18" height="11" rx="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+            </span>
+            <input
+              type="password"
+              id="password"
+              placeholder="ระบุ password"
+              autocomplete="current-password"
+              required
+            />
+            <button
+              type="button"
+              class="eye-btn"
+              onclick="togglePwd()"
+              title="แสดง/ซ่อน password"
+            >
+              <svg
+                id="eyeIcon"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <button type="submit" class="btn-login" id="loginBtn">
+          <span id="btnText">เข้าสู่ระบบ</span>
+        </button>
+      </form>
+
+      <div class="divider"></div>
+      <!-- <div class="hint">Username: <strong>admin</strong> &nbsp;/&nbsp; Password: <strong>admin123</strong></div> -->
+    </div>
+
+    <script>
+      if (localStorage.getItem("pl_token")) {
+        location.href = "/dashboard.html";
+      }
+
+      let pwdVisible = false;
+      function togglePwd() {
+        pwdVisible = !pwdVisible;
+        const inp = document.getElementById("password");
+        inp.type = pwdVisible ? "text" : "password";
+      }
+
+      function showErr(msg) {
+        document.getElementById("errText").textContent = msg;
+        document.getElementById("errMsg").classList.add("show");
+      }
+      function hideErr() {
+        document.getElementById("errMsg").classList.remove("show");
+      }
+
+      document
+        .getElementById("loginForm")
+        .addEventListener("submit", async (e) => {
+          e.preventDefault();
+          hideErr();
+          const btn = document.getElementById("loginBtn");
+          const btnText = document.getElementById("btnText");
+          btn.disabled = true;
+          btnText.innerHTML = "";
+          btn.insertAdjacentHTML("afterbegin", '<div class="spinner"></div>');
+          btnText.textContent = "กำลังเข้าสู่ระบบ...";
+
+          try {
+            const res = await fetch("/api/login", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                username: document.getElementById("username").value.trim(),
+                password: document.getElementById("password").value,
+              }),
+            });
+            const json = await res.json();
+            if (res.ok && json.token) {
+              localStorage.setItem("pl_token", json.token);
+              localStorage.setItem("pl_user", json.username || "admin");
+              location.href = "/dashboard.html";
+            } else {
+              showErr(json.error || "Username หรือ Password ไม่ถูกต้อง");
+            }
+          } catch {
+            showErr("ไม่สามารถเชื่อมต่อ Server ได้ กรุณาตรวจสอบการเชื่อมต่อ");
+          } finally {
+            btn.disabled = false;
+            btn.querySelector(".spinner")?.remove();
+            btnText.textContent = "เข้าสู่ระบบ";
+          }
+        });
+    </script>
+  </body>
 </html>

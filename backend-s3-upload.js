@@ -2,6 +2,7 @@ const express = require('express');
 const AWS = require('aws-sdk');
 const multer = require('multer');
 const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
@@ -47,6 +48,42 @@ function clearCache() {
   cache.data = null;
   cache.expiresAt = 0;
 }
+
+// ===== RATE LIMITING CONFIGURATION =====
+const RATE_LIMIT_WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_SECONDS || 60) * 1000;
+const RATE_LIMIT_MAX_PUBLIC = Number(process.env.RATE_LIMIT_MAX_PUBLIC || 100); // 100 req/min for public
+const RATE_LIMIT_MAX_API = Number(process.env.RATE_LIMIT_MAX_API || 30); // 30 req/min for API
+const RATE_LIMIT_MAX_LOGIN = Number(process.env.RATE_LIMIT_MAX_LOGIN || 5); // 5 req/min for login
+
+// Rate limiter for public endpoints (generous)
+const publicLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  max: RATE_LIMIT_MAX_PUBLIC,
+  message: { error: 'Too many requests, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.ip || req.headers['x-forwarded-for'] || 'unknown'
+});
+
+// Rate limiter for API endpoints (moderate)
+const apiLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  max: RATE_LIMIT_MAX_API,
+  message: { error: 'Too many API requests, please slow down' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.ip || req.headers['x-forwarded-for'] || 'unknown'
+});
+
+// Rate limiter for login (strict - prevent brute force)
+const loginLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  max: RATE_LIMIT_MAX_LOGIN,
+  message: { error: 'Too many login attempts, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.ip || req.headers['x-forwarded-for'] || 'unknown'
+});
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -142,7 +179,7 @@ async function initDb() {
 }
 
 // Public JSON endpoint — no auth, open CORS (replaces CloudFront)
-app.get('/paymentLimitsCTM.json', async (req, res) => {
+app.get('/paymentLimitsCTM.json', publicLimiter, async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 'public, max-age=60');
   
@@ -340,7 +377,7 @@ function requireAuth(req, res, next) {
   next();
 }
 
-app.post('/api/login', (req, res) => {
+app.post('/api/login', loginLimiter, (req, res) => {
   const { username, password } = req.body || {};
   if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
     const token = crypto.randomUUID();
@@ -350,14 +387,14 @@ app.post('/api/login', (req, res) => {
   res.status(401).json({ error: 'Username หรือ Password ไม่ถูกต้อง' });
 });
 
-app.post('/api/logout', (req, res) => {
+app.post('/api/logout', apiLimiter, (req, res) => {
   const auth = req.headers.authorization || '';
   const token = auth.replace('Bearer ', '').trim();
   sessions.delete(token);
   res.json({ success: true });
 });
 
-app.get('/health', (req, res) => {
+app.get('/health', publicLimiter, (req, res) => {
   const storage = useS3 ? 's3' : usePostgres ? 'postgres' : 'local';
   const cacheActive = cache.data !== null && Date.now() < cache.expiresAt;
   const cacheTtlRemaining = cacheActive ? Math.round((cache.expiresAt - Date.now()) / 1000) : 0;
@@ -376,18 +413,27 @@ app.get('/health', (req, res) => {
       hitRate: cache.hits + cache.misses > 0 
         ? Math.round((cache.hits / (cache.hits + cache.misses)) * 100) + '%'
         : '0%'
+    },
+    rateLimit: {
+      enabled: true,
+      windowSeconds: RATE_LIMIT_WINDOW_MS / 1000,
+      limits: {
+        public: RATE_LIMIT_MAX_PUBLIC,
+        api: RATE_LIMIT_MAX_API,
+        login: RATE_LIMIT_MAX_LOGIN
+      }
     }
   });
 });
 
 // Clear cache endpoint (requires auth)
-app.post('/api/clear-cache', requireAuth, (req, res) => {
+app.post('/api/clear-cache', apiLimiter, requireAuth, (req, res) => {
   clearCache();
   res.json({ success: true, message: 'Cache cleared' });
 });
 
 // Endpoint สำหรับอัพโหลด JSON file
-app.post('/api/upload-payment-limits', requireAuth, upload.single('file'), async (req, res) => {
+app.post('/api/upload-payment-limits', apiLimiter, requireAuth, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'ไม่พบไฟล์ที่อัพโหลด' });
@@ -435,7 +481,7 @@ app.post('/api/upload-payment-limits', requireAuth, upload.single('file'), async
 });
 
 // Endpoint สำหรับอัพเดทไฟล์เดิม (เขียนทับ)
-app.post('/api/update-payment-limits', requireAuth, async (req, res) => {
+app.post('/api/update-payment-limits', apiLimiter, requireAuth, async (req, res) => {
   try {
     const { data } = req.body;
 
@@ -476,7 +522,7 @@ app.post('/api/update-payment-limits', requireAuth, async (req, res) => {
 });
 
 // Endpoint สำหรับดึงข้อมูล
-app.get('/api/get-payment-limits', requireAuth, async (req, res) => {
+app.get('/api/get-payment-limits', apiLimiter, requireAuth, async (req, res) => {
   try {
     const data = await getObject(PAYMENT_LIMITS_KEY);
     const jsonData = parseJsonOrThrow(data);

@@ -90,21 +90,26 @@ if (useS3) {
 
 async function initDb() {
   if (!usePostgres) return;
+  // Support row-based table structure: id, payment_method, min_amount, max_amount, updated_at
   await pool.query(`
     CREATE TABLE IF NOT EXISTS payment_limits (
-      key TEXT PRIMARY KEY,
+      id SERIAL PRIMARY KEY,
+      payment_method TEXT UNIQUE NOT NULL,
+      min_amount NUMERIC DEFAULT 0,
+      max_amount NUMERIC DEFAULT 0,
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  // Add columns if they don't exist (for legacy tables)
   await pool.query(`
     ALTER TABLE payment_limits
-      ADD COLUMN IF NOT EXISTS key TEXT,
-      ADD COLUMN IF NOT EXISTS data TEXT,
-      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()
-  `);
-  // ensure unique constraint on key for ON CONFLICT to work on tables created without PRIMARY KEY
+      ADD COLUMN IF NOT EXISTS payment_method TEXT,
+      ADD COLUMN IF NOT EXISTS min_amount NUMERIC DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS max_amount NUMERIC DEFAULT 0
+  `).catch(() => {});
+  // Create unique index on payment_method for upsert
   await pool.query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS payment_limits_key_unique ON payment_limits (key)
+    CREATE UNIQUE INDEX IF NOT EXISTS payment_limits_method_unique ON payment_limits (payment_method)
   `).catch(() => {});
 }
 
@@ -177,13 +182,33 @@ async function uploadObject({ key, body, contentType = 'application/json' }) {
 
   if (usePostgres) {
     const dataStr = Buffer.isBuffer(body) ? body.toString() : String(body);
-    await pool.query(
-      `INSERT INTO payment_limits (key, data, updated_at)
-       VALUES ($1, $2, NOW())
-       ON CONFLICT (key) DO UPDATE SET data = $2, updated_at = NOW()`,
-      [key, dataStr]
-    );
-    return { location: `postgres://${key}`, key, bucket: 'postgres' };
+    const jsonData = JSON.parse(dataStr);
+    const paymentLimits = jsonData.paymentLimits || {};
+
+    // Get existing payment methods
+    const existingResult = await pool.query('SELECT payment_method FROM payment_limits');
+    const existingMethods = new Set(existingResult.rows.map(r => r.payment_method));
+    const newMethods = new Set(Object.keys(paymentLimits));
+
+    // Delete removed methods
+    for (const method of existingMethods) {
+      if (!newMethods.has(method)) {
+        await pool.query('DELETE FROM payment_limits WHERE payment_method = $1', [method]);
+      }
+    }
+
+    // Upsert each payment method as a row
+    for (const [method, limits] of Object.entries(paymentLimits)) {
+      const min = limits.min || 0;
+      const max = limits.max || 0;
+      await pool.query(
+        `INSERT INTO payment_limits (payment_method, min_amount, max_amount, updated_at)
+         VALUES ($1, $2, $3, NOW())
+         ON CONFLICT (payment_method) DO UPDATE SET min_amount = $2, max_amount = $3, updated_at = NOW()`,
+        [method, min, max]
+      );
+    }
+    return { location: `postgres://payment_limits`, key, bucket: 'postgres' };
   }
 
   const outputPath = path.join(LOCAL_STORAGE_DIR, key);
@@ -208,13 +233,28 @@ async function getObject(key) {
   }
 
   if (usePostgres) {
-    const result = await pool.query('SELECT data FROM payment_limits WHERE key = $1', [key]);
+    // Read from row-based table and convert to JSON format
+    const result = await pool.query(
+      'SELECT payment_method, min_amount, max_amount FROM payment_limits WHERE payment_method IS NOT NULL ORDER BY payment_method'
+    );
+    
     if (result.rows.length === 0) {
       const err = new Error('NoSuchKey');
       err.code = 'NoSuchKey';
       throw err;
     }
-    return Buffer.from(result.rows[0].data);
+
+    // Convert rows to JSON format: { paymentLimits: { method: { min, max }, ... } }
+    const paymentLimits = {};
+    for (const row of result.rows) {
+      paymentLimits[row.payment_method] = {
+        min: Number(row.min_amount) || 0,
+        max: Number(row.max_amount) || 0
+      };
+    }
+
+    const jsonData = { paymentLimits };
+    return Buffer.from(JSON.stringify(jsonData, null, 2));
   }
 
   const inputPath = path.join(LOCAL_STORAGE_DIR, key);

@@ -3,6 +3,7 @@ const AWS = require('aws-sdk');
 const multer = require('multer');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
+const Redis = require('ioredis');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
@@ -22,31 +23,107 @@ const TOKEN_TTL_MS = 8 * 60 * 60 * 1000;
 const sessions = new Map();
 
 // ===== CACHE CONFIGURATION =====
-const CACHE_TTL_MS = Number(process.env.CACHE_TTL_SECONDS || 60) * 1000; // default 60 seconds
-const cache = {
+const CACHE_TTL_SECONDS = Number(process.env.CACHE_TTL_SECONDS || 60);
+const CACHE_KEY = 'payment_limits_cache';
+const REDIS_URL = process.env.REDIS_URL || process.env.REDIS_PRIVATE_URL;
+
+// Redis client (optional - falls back to in-memory if not configured)
+let redis = null;
+let useRedis = false;
+
+if (REDIS_URL) {
+  try {
+    redis = new Redis(REDIS_URL, {
+      maxRetriesPerRequest: 3,
+      retryDelayOnFailover: 100,
+      lazyConnect: true
+    });
+    redis.on('error', (err) => {
+      console.error('Redis error:', err.message);
+      useRedis = false;
+    });
+    redis.on('connect', () => {
+      console.log('Redis connected');
+      useRedis = true;
+    });
+  } catch (err) {
+    console.error('Redis init error:', err.message);
+  }
+}
+
+// In-memory fallback cache
+const memoryCache = {
   data: null,
-  expiresAt: 0,
-  hits: 0,
-  misses: 0
+  expiresAt: 0
 };
 
-function getCachedData() {
-  if (cache.data && Date.now() < cache.expiresAt) {
-    cache.hits++;
-    return cache.data;
+// Cache stats
+const cacheStats = {
+  hits: 0,
+  misses: 0,
+  redisHits: 0,
+  redisMisses: 0,
+  memoryHits: 0,
+  memoryMisses: 0
+};
+
+async function getCachedData() {
+  // Try Redis first
+  if (useRedis && redis) {
+    try {
+      const cached = await redis.get(CACHE_KEY);
+      if (cached) {
+        cacheStats.hits++;
+        cacheStats.redisHits++;
+        return JSON.parse(cached);
+      }
+      cacheStats.misses++;
+      cacheStats.redisMisses++;
+      return null;
+    } catch (err) {
+      console.error('Redis get error:', err.message);
+    }
   }
-  cache.misses++;
+  
+  // Fallback to memory cache
+  if (memoryCache.data && Date.now() < memoryCache.expiresAt) {
+    cacheStats.hits++;
+    cacheStats.memoryHits++;
+    return memoryCache.data;
+  }
+  cacheStats.misses++;
+  cacheStats.memoryMisses++;
   return null;
 }
 
-function setCachedData(data) {
-  cache.data = data;
-  cache.expiresAt = Date.now() + CACHE_TTL_MS;
+async function setCachedData(data) {
+  // Set in Redis
+  if (useRedis && redis) {
+    try {
+      await redis.setex(CACHE_KEY, CACHE_TTL_SECONDS, JSON.stringify(data));
+    } catch (err) {
+      console.error('Redis set error:', err.message);
+    }
+  }
+  
+  // Always set in memory as fallback
+  memoryCache.data = data;
+  memoryCache.expiresAt = Date.now() + (CACHE_TTL_SECONDS * 1000);
 }
 
-function clearCache() {
-  cache.data = null;
-  cache.expiresAt = 0;
+async function clearCache() {
+  // Clear Redis
+  if (useRedis && redis) {
+    try {
+      await redis.del(CACHE_KEY);
+    } catch (err) {
+      console.error('Redis del error:', err.message);
+    }
+  }
+  
+  // Clear memory
+  memoryCache.data = null;
+  memoryCache.expiresAt = 0;
 }
 
 // ===== RATE LIMITING CONFIGURATION =====
@@ -184,9 +261,9 @@ app.get('/paymentLimitsCTM.json', publicLimiter, async (req, res) => {
   res.setHeader('Cache-Control', 'public, max-age=60');
   
   // Check cache first
-  const cached = getCachedData();
+  const cached = await getCachedData();
   if (cached) {
-    res.setHeader('X-Cache', 'HIT');
+    res.setHeader('X-Cache', useRedis ? 'HIT (Redis)' : 'HIT (Memory)');
     return res.json(cached);
   }
   
@@ -194,12 +271,12 @@ app.get('/paymentLimitsCTM.json', publicLimiter, async (req, res) => {
   try {
     const data = await getObject(PAYMENT_LIMITS_KEY);
     const jsonData = JSON.parse(data.toString());
-    setCachedData(jsonData); // Save to cache
+    await setCachedData(jsonData); // Save to cache
     res.json(jsonData);
   } catch (error) {
     if (error.code === 'NoSuchKey') {
       const emptyData = { paymentLimits: {} };
-      setCachedData(emptyData);
+      await setCachedData(emptyData);
       return res.json(emptyData);
     }
     res.status(500).json({ error: 'Internal Server Error' });
@@ -250,7 +327,7 @@ async function uploadObject({ key, body, contentType = 'application/json' }) {
       ACL: 'private'
     }).promise();
 
-    clearCache(); // Clear cache when data changes
+    await clearCache(); // Clear cache when data changes
     return {
       location: result.Location,
       key: result.Key,
@@ -286,7 +363,7 @@ async function uploadObject({ key, body, contentType = 'application/json' }) {
         [method, min, max]
       );
     }
-    clearCache(); // Clear cache when data changes
+    await clearCache(); // Clear cache when data changes
     return { location: `postgres://payment_limits`, key, bucket: 'postgres' };
   }
 
@@ -295,7 +372,7 @@ async function uploadObject({ key, body, contentType = 'application/json' }) {
   const dataBuffer = Buffer.isBuffer(body) ? body : Buffer.from(String(body));
   await fs.promises.writeFile(outputPath, dataBuffer);
 
-  clearCache(); // Clear cache when data changes
+  await clearCache(); // Clear cache when data changes
   return {
     location: `file://${outputPath}`,
     key,
@@ -396,8 +473,8 @@ app.post('/api/logout', apiLimiter, (req, res) => {
 
 app.get('/health', publicLimiter, (req, res) => {
   const storage = useS3 ? 's3' : usePostgres ? 'postgres' : 'local';
-  const cacheActive = cache.data !== null && Date.now() < cache.expiresAt;
-  const cacheTtlRemaining = cacheActive ? Math.round((cache.expiresAt - Date.now()) / 1000) : 0;
+  const memoryCacheActive = memoryCache.data !== null && Date.now() < memoryCache.expiresAt;
+  const cacheTtlRemaining = memoryCacheActive ? Math.round((memoryCache.expiresAt - Date.now()) / 1000) : 0;
   
   res.json({
     status: 'ok',
@@ -405,14 +482,22 @@ app.get('/health', publicLimiter, (req, res) => {
     storage,
     cache: {
       enabled: true,
-      ttlSeconds: CACHE_TTL_MS / 1000,
-      active: cacheActive,
+      type: useRedis ? 'redis' : 'memory',
+      redisConnected: useRedis,
+      ttlSeconds: CACHE_TTL_SECONDS,
+      memoryActive: memoryCacheActive,
       ttlRemaining: cacheTtlRemaining,
-      hits: cache.hits,
-      misses: cache.misses,
-      hitRate: cache.hits + cache.misses > 0 
-        ? Math.round((cache.hits / (cache.hits + cache.misses)) * 100) + '%'
-        : '0%'
+      stats: {
+        totalHits: cacheStats.hits,
+        totalMisses: cacheStats.misses,
+        redisHits: cacheStats.redisHits,
+        redisMisses: cacheStats.redisMisses,
+        memoryHits: cacheStats.memoryHits,
+        memoryMisses: cacheStats.memoryMisses,
+        hitRate: cacheStats.hits + cacheStats.misses > 0 
+          ? Math.round((cacheStats.hits / (cacheStats.hits + cacheStats.misses)) * 100) + '%'
+          : '0%'
+      }
     },
     rateLimit: {
       enabled: true,
@@ -427,9 +512,9 @@ app.get('/health', publicLimiter, (req, res) => {
 });
 
 // Clear cache endpoint (requires auth)
-app.post('/api/clear-cache', apiLimiter, requireAuth, (req, res) => {
-  clearCache();
-  res.json({ success: true, message: 'Cache cleared' });
+app.post('/api/clear-cache', apiLimiter, requireAuth, async (req, res) => {
+  await clearCache();
+  res.json({ success: true, message: 'Cache cleared (Redis: ' + useRedis + ')' });
 });
 
 // Endpoint สำหรับอัพโหลด JSON file

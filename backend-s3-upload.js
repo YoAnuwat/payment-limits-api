@@ -381,8 +381,9 @@ app.get('/api/get-payment-limits', requireAuth, async (req, res) => {
 
   } catch (error) {
     if (error.code === 'NoSuchKey') {
-      return res.status(404).json({
-        error: 'ไม่พบไฟล์ payment limits'
+      return res.json({
+        success: true,
+        data: { paymentLimits: {} }
       });
     }
     console.error('Error getting data:', error);

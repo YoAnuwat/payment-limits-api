@@ -17,10 +17,36 @@ const PAYMENT_LIMITS_KEY = process.env.CURRENT_PAYMENT_LIMITS_KEY || 'paymentLim
 const PAYMENT_LIMITS_UPLOAD_PREFIX = process.env.PAYMENT_LIMITS_UPLOAD_PREFIX || 'payment-limits';
 const STORAGE_MODE = (process.env.STORAGE_MODE || 'auto').toLowerCase();
 const LOCAL_STORAGE_DIR = process.env.LOCAL_STORAGE_DIR || path.join(__dirname, '.local-storage');
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 const TOKEN_TTL_MS = 8 * 60 * 60 * 1000;
 const sessions = new Map();
+
+// ===== MULTI-USER CONFIGURATION =====
+// Format: USERS=user1:password1,user2:password2 or use legacy ADMIN_USERNAME/ADMIN_PASSWORD
+function parseUsers() {
+  const users = new Map();
+  
+  // Parse USERS env variable (format: user1:pass1,user2:pass2)
+  const usersEnv = process.env.USERS || '';
+  if (usersEnv) {
+    usersEnv.split(',').forEach(pair => {
+      const [username, password] = pair.split(':').map(s => s.trim());
+      if (username && password) {
+        users.set(username, password);
+      }
+    });
+  }
+  
+  // Fallback to legacy single admin user
+  if (users.size === 0) {
+    const adminUser = process.env.ADMIN_USERNAME || 'admin';
+    const adminPass = process.env.ADMIN_PASSWORD || 'admin123';
+    users.set(adminUser, adminPass);
+  }
+  
+  return users;
+}
+
+const validUsers = parseUsers();
 
 // ===== CACHE CONFIGURATION =====
 const CACHE_TTL_SECONDS = Number(process.env.CACHE_TTL_SECONDS || 60);
@@ -456,7 +482,9 @@ function requireAuth(req, res, next) {
 
 app.post('/api/login', loginLimiter, (req, res) => {
   const { username, password } = req.body || {};
-  if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+  
+  // Check if user exists and password matches
+  if (username && validUsers.has(username) && validUsers.get(username) === password) {
     const token = crypto.randomUUID();
     sessions.set(token, { username, expiresAt: Date.now() + TOKEN_TTL_MS });
     return res.json({ token, username });

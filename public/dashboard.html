@@ -514,9 +514,12 @@
     return text.slice(0, idx) + '<mark>' + text.slice(idx, idx + filterText.length) + '</mark>' + text.slice(idx + filterText.length);
   }
 
+  // Hidden keys (ไม่แสดงใน UI)
+  const HIDDEN_KEYS = ['default'];
+
   function renderTable() {
     const tbody = document.getElementById('tBody');
-    const allKeys = Object.keys(limitsData);
+    const allKeys = Object.keys(limitsData).filter(k => !HIDDEN_KEYS.includes(k));
     const keys = filterText ? allKeys.filter(k => k.toLowerCase().includes(filterText)) : allKeys;
 
     const countEl = document.getElementById('countLabel');

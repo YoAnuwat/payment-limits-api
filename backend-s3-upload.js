@@ -20,6 +20,34 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 const TOKEN_TTL_MS = 8 * 60 * 60 * 1000;
 const sessions = new Map();
 
+// ===== CACHE CONFIGURATION =====
+const CACHE_TTL_MS = Number(process.env.CACHE_TTL_SECONDS || 60) * 1000; // default 60 seconds
+const cache = {
+  data: null,
+  expiresAt: 0,
+  hits: 0,
+  misses: 0
+};
+
+function getCachedData() {
+  if (cache.data && Date.now() < cache.expiresAt) {
+    cache.hits++;
+    return cache.data;
+  }
+  cache.misses++;
+  return null;
+}
+
+function setCachedData(data) {
+  cache.data = data;
+  cache.expiresAt = Date.now() + CACHE_TTL_MS;
+}
+
+function clearCache() {
+  cache.data = null;
+  cache.expiresAt = 0;
+}
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_UPLOAD_SIZE_BYTES }
@@ -116,14 +144,26 @@ async function initDb() {
 // Public JSON endpoint — no auth, open CORS (replaces CloudFront)
 app.get('/paymentLimitsCTM.json', async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Cache-Control', 'public, max-age=60');
+  
+  // Check cache first
+  const cached = getCachedData();
+  if (cached) {
+    res.setHeader('X-Cache', 'HIT');
+    return res.json(cached);
+  }
+  
+  res.setHeader('X-Cache', 'MISS');
   try {
     const data = await getObject(PAYMENT_LIMITS_KEY);
     const jsonData = JSON.parse(data.toString());
+    setCachedData(jsonData); // Save to cache
     res.json(jsonData);
   } catch (error) {
     if (error.code === 'NoSuchKey') {
-      return res.json({ paymentLimits: {} });
+      const emptyData = { paymentLimits: {} };
+      setCachedData(emptyData);
+      return res.json(emptyData);
     }
     res.status(500).json({ error: 'Internal Server Error' });
   }
@@ -173,6 +213,7 @@ async function uploadObject({ key, body, contentType = 'application/json' }) {
       ACL: 'private'
     }).promise();
 
+    clearCache(); // Clear cache when data changes
     return {
       location: result.Location,
       key: result.Key,
@@ -208,6 +249,7 @@ async function uploadObject({ key, body, contentType = 'application/json' }) {
         [method, min, max]
       );
     }
+    clearCache(); // Clear cache when data changes
     return { location: `postgres://payment_limits`, key, bucket: 'postgres' };
   }
 
@@ -216,6 +258,7 @@ async function uploadObject({ key, body, contentType = 'application/json' }) {
   const dataBuffer = Buffer.isBuffer(body) ? body : Buffer.from(String(body));
   await fs.promises.writeFile(outputPath, dataBuffer);
 
+  clearCache(); // Clear cache when data changes
   return {
     location: `file://${outputPath}`,
     key,
@@ -316,7 +359,31 @@ app.post('/api/logout', (req, res) => {
 
 app.get('/health', (req, res) => {
   const storage = useS3 ? 's3' : usePostgres ? 'postgres' : 'local';
-  res.json({ status: 'ok', service: 'payment-limits-s3-backend', storage });
+  const cacheActive = cache.data !== null && Date.now() < cache.expiresAt;
+  const cacheTtlRemaining = cacheActive ? Math.round((cache.expiresAt - Date.now()) / 1000) : 0;
+  
+  res.json({
+    status: 'ok',
+    service: 'payment-limits-s3-backend',
+    storage,
+    cache: {
+      enabled: true,
+      ttlSeconds: CACHE_TTL_MS / 1000,
+      active: cacheActive,
+      ttlRemaining: cacheTtlRemaining,
+      hits: cache.hits,
+      misses: cache.misses,
+      hitRate: cache.hits + cache.misses > 0 
+        ? Math.round((cache.hits / (cache.hits + cache.misses)) * 100) + '%'
+        : '0%'
+    }
+  });
+});
+
+// Clear cache endpoint (requires auth)
+app.post('/api/clear-cache', requireAuth, (req, res) => {
+  clearCache();
+  res.json({ success: true, message: 'Cache cleared' });
 });
 
 // Endpoint สำหรับอัพโหลด JSON file

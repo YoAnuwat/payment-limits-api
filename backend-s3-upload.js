@@ -250,7 +250,11 @@ if (useS3) {
   const isInternal = process.env.DATABASE_URL && process.env.DATABASE_URL.includes('railway.internal');
   pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: isInternal ? false : { rejectUnauthorized: false }
+    ssl: isInternal ? false : { rejectUnauthorized: false },
+    min: 1,
+    max: 10,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 3000
   });
 } else {
   fs.mkdirSync(LOCAL_STORAGE_DIR, { recursive: true });

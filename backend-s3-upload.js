@@ -50,8 +50,9 @@ const validUsers = parseUsers();
 
 // ===== CACHE CONFIGURATION =====
 const CACHE_TTL_SECONDS = Number(process.env.CACHE_TTL_SECONDS || 60);
+const REDIS_TTL_SECONDS = Number(process.env.REDIS_TTL_SECONDS || 86400); // 24h, cleared on admin CRUD
 const CACHE_KEY = 'payment_limits_cache';
-const REDIS_URL = process.env.REDIS_URL || process.env.REDIS_PRIVATE_URL;
+const REDIS_URL = process.env.REDIS_URL;
 
 // Redis client (optional - falls back to in-memory if not configured)
 let redis = null;
@@ -126,7 +127,7 @@ async function setCachedData(data) {
   // Set in Redis
   if (useRedis && redis) {
     try {
-      await redis.setex(CACHE_KEY, CACHE_TTL_SECONDS, JSON.stringify(data));
+      await redis.setex(CACHE_KEY, REDIS_TTL_SECONDS, JSON.stringify(data));
     } catch (err) {
       console.error('Redis set error:', err.message);
     }
@@ -516,7 +517,7 @@ app.get('/health', publicLimiter, (req, res) => {
       enabled: true,
       type: useRedis ? 'redis' : 'memory',
       redisConnected: useRedis,
-      ttlSeconds: CACHE_TTL_SECONDS,
+      ttlSeconds: useRedis ? REDIS_TTL_SECONDS : CACHE_TTL_SECONDS,
       memoryActive: memoryCacheActive,
       ttlRemaining: cacheTtlRemaining,
       stats: {
@@ -682,9 +683,20 @@ const PORT = process.env.PORT || 3001;
 
 async function start() {
   await initDb();
-  app.listen(PORT, () => {
+  app.listen(PORT, async () => {
     const storage = useS3 ? 's3' : usePostgres ? 'postgres' : 'local';
     console.log(`Server is running on port ${PORT} (storage: ${storage})`);
+    console.log(`REDIS_URL: ${REDIS_URL || '(not set)'}`);
+    if (redis) {
+      try {
+        await redis.ping();
+        console.log('Redis status: ready');
+      } catch (err) {
+        console.log(`Redis status: not ready (${err.message})`);
+      }
+    } else {
+      console.log('Redis status: not configured (using in-memory cache)');
+    }
   });
 }
 

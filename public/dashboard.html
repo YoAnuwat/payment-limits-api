@@ -259,6 +259,15 @@
     .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
 
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    .btn-spinner {
+      width: 13px; height: 13px;
+      border: 2px solid rgba(255,255,255,0.4);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
   </style>
 </head>
 <body>
@@ -626,6 +635,12 @@
     const minV = Number(document.getElementById('eMin').value);
     const maxV = Number(document.getElementById('eMax').value);
     if (!validateMinMax(minV, maxV)) return;
+
+    const saveBtn = document.querySelector('.row-editing .btn-success');
+    const cancelBtn = document.querySelector('.row-editing .btn-ghost');
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.innerHTML = '<div class="btn-spinner"></div>กำลังบันทึก...'; }
+    if (cancelBtn) cancelBtn.disabled = true;
+
     limitsData[key] = { min: minV, max: maxV };
     editKey = null;
     await saveAll();
@@ -675,6 +690,11 @@
     if (limitsData[keyV] !== undefined) { toast(`ประเภท "${keyV}" มีอยู่แล้ว`, 'error'); return; }
     if (isNaN(minV) || isNaN(maxV)) { toast('กรุณากรอกค่า min และ max', 'error'); return; }
     if (!validateMinMax(minV, maxV)) return;
+
+    const saveBtn = document.querySelector('.row-new .btn-success');
+    const cancelBtn = document.querySelector('.row-new .btn-ghost');
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.innerHTML = '<div class="btn-spinner"></div>กำลังบันทึก...'; }
+    if (cancelBtn) cancelBtn.disabled = true;
 
     limitsData[keyV] = { min: minV, max: maxV };
     addingNew = false;

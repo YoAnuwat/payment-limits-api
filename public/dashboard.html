@@ -258,6 +258,18 @@
     .modal p { font-size: 14px; color: #64748b; margin-bottom: 24px; line-height: 1.6; }
     .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
 
+    .section { display: none; }
+    .section.active { display: flex; flex-direction: column; gap: 22px; }
+
+    .action-badge {
+      display: inline-flex; align-items: center;
+      padding: 3px 9px; border-radius: 20px;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.03em;
+    }
+    .badge-create { background: #f0fdf4; color: #16a34a; }
+    .badge-update { background: #eff6ff; color: #2563eb; }
+    .badge-delete { background: #fef2f2; color: #dc2626; }
+
     @keyframes spin { to { transform: rotate(360deg); } }
 
     .btn-spinner {
@@ -301,11 +313,18 @@
 
   <div class="sb-nav">
     <div class="sb-section-label">เมนูหลัก</div>
-    <a class="nav-item active" href="#">
+    <a class="nav-item active" id="navLimits" href="#" onclick="showSection('limits');return false;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
       </svg>
       Payment Limits
+    </a>
+    <a class="nav-item" id="navLogs" href="#" onclick="showSection('logs');return false;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <polyline points="12 6 12 12 16 14"/>
+      </svg>
+      ประวัติการแก้ไข
     </a>
   </div>
 
@@ -348,6 +367,8 @@
   </div>
 
   <div class="content">
+
+    <div class="section active" id="sectionLimits">
 
     <!-- Limits card -->
     <div class="card">
@@ -413,6 +434,53 @@
       </div>
     </div>
 
+    </div><!-- /sectionLimits -->
+
+    <div class="section" id="sectionLogs">
+
+    <!-- Audit logs card -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-header-left">
+          <div class="card-icon card-icon-blue">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+          </div>
+          <div>
+            <div class="card-title">ประวัติการแก้ไข</div>
+            <div class="card-sub">บันทึกการเปลี่ยนแปลง Payment Limits ทั้งหมด</div>
+          </div>
+        </div>
+        <button class="btn btn-ghost" onclick="loadAuditLogs()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+          </svg>
+          รีเฟรช
+        </button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:48px">#</th>
+              <th>วันที่/เวลา</th>
+              <th>ผู้ใช้</th>
+              <th>การกระทำ</th>
+              <th>ประเภท</th>
+              <th>ค่าเดิม</th>
+              <th>ค่าใหม่</th>
+            </tr>
+          </thead>
+          <tbody id="logBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    </div><!-- /sectionLogs -->
+
   </div><!-- /content -->
 </div><!-- /main -->
 
@@ -426,6 +494,7 @@
   document.getElementById('uAvatar').textContent = uname.charAt(0).toUpperCase();
 
   // === state ===
+  let currentSection = 'limits';
   let limitsData = {};
   let editKey = null;
   let addingNew = false;
@@ -743,6 +812,56 @@
         loadData();
       }
     } catch { toast('ไม่สามารถเชื่อมต่อ Server ได้', 'error'); loadData(); }
+  }
+
+  // === section navigation ===
+  function showSection(name) {
+    currentSection = name;
+    document.getElementById('sectionLimits').classList.toggle('active', name === 'limits');
+    document.getElementById('sectionLogs').classList.toggle('active', name === 'logs');
+    document.getElementById('navLimits').classList.toggle('active', name === 'limits');
+    document.getElementById('navLogs').classList.toggle('active', name === 'logs');
+    if (name === 'logs') loadAuditLogs();
+  }
+
+  async function loadAuditLogs() {
+    const tbody = document.getElementById('logBody');
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:32px;color:#94a3b8">กำลังโหลด...</td></tr>';
+    try {
+      const res = await apiFetch('/api/audit-logs?limit=200');
+      if (!res) return;
+      const json = await res.json();
+      renderAuditLogs(json.logs || []);
+    } catch {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:32px;color:#dc2626">โหลดข้อมูลไม่สำเร็จ</td></tr>';
+    }
+  }
+
+  function renderAuditLogs(logs) {
+    const tbody = document.getElementById('logBody');
+    if (!logs.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:#94a3b8">ยังไม่มีประวัติการแก้ไข</td></tr>';
+      return;
+    }
+    const actionLabel = { create: 'เพิ่ม', update: 'แก้ไข', delete: 'ลบ' };
+    const actionClass = { create: 'badge-create', update: 'badge-update', delete: 'badge-delete' };
+    tbody.innerHTML = logs.map((log, i) => {
+      const dt = new Date(log.created_at);
+      const dateStr = dt.toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      const timeStr = dt.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const oldVal = log.old_min != null ? `${Number(log.old_min).toLocaleString('th-TH')} / ${Number(log.old_max).toLocaleString('th-TH')}` : '—';
+      const newVal = log.new_min != null ? `${Number(log.new_min).toLocaleString('th-TH')} / ${Number(log.new_max).toLocaleString('th-TH')}` : '—';
+      const badge = `<span class="action-badge ${actionClass[log.action] || ''}">${actionLabel[log.action] || log.action}</span>`;
+      return `<tr>
+        <td class="row-num">${i + 1}</td>
+        <td style="font-size:13px;white-space:nowrap">${dateStr}<br><span style="color:#94a3b8;font-size:11px">${timeStr}</span></td>
+        <td><span class="type-tag">${log.username}</span></td>
+        <td>${badge}</td>
+        <td><span class="type-tag">${log.payment_method || '—'}</span></td>
+        <td style="font-size:13px;color:#64748b">${oldVal}</td>
+        <td style="font-size:13px;font-weight:600">${newVal}</td>
+      </tr>`;
+    }).join('');
   }
 
   // === logout ===

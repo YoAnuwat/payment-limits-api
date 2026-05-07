@@ -284,6 +284,19 @@ async function initDb() {
   await pool.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS payment_limits_method_unique ON payment_limits (payment_method)
   `).catch(() => {});
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id SERIAL PRIMARY KEY,
+      username TEXT NOT NULL,
+      action TEXT NOT NULL,
+      payment_method TEXT,
+      old_min NUMERIC,
+      old_max NUMERIC,
+      new_min NUMERIC,
+      new_max NUMERIC,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
 }
 
 // Public JSON endpoint — no auth, open CORS (replaces CloudFront)
@@ -458,6 +471,31 @@ async function getObject(key) {
   }
 }
 
+async function appendAuditLogs(entries) {
+  if (!entries || entries.length === 0) return;
+  if (usePostgres) {
+    for (const e of entries) {
+      await pool.query(
+        `INSERT INTO audit_logs (username, action, payment_method, old_min, old_max, new_min, new_max)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [e.username, e.action, e.payment_method, e.old_min ?? null, e.old_max ?? null, e.new_min ?? null, e.new_max ?? null]
+      );
+    }
+    return;
+  }
+  const logFile = path.join(LOCAL_STORAGE_DIR, 'audit_logs.json');
+  await fs.promises.mkdir(LOCAL_STORAGE_DIR, { recursive: true });
+  let existing = [];
+  try {
+    const raw = await fs.promises.readFile(logFile, 'utf8');
+    existing = JSON.parse(raw);
+  } catch {}
+  const now = new Date().toISOString();
+  const newEntries = entries.map(e => ({ ...e, created_at: now }));
+  const merged = [...newEntries, ...existing].slice(0, 1000);
+  await fs.promises.writeFile(logFile, JSON.stringify(merged, null, 2));
+}
+
 function validatePaymentLimitsData(data) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
     return 'ข้อมูลต้องเป็น JSON object';
@@ -612,12 +650,65 @@ app.post('/api/update-payment-limits', apiLimiter, requireAuth, async (req, res)
       return res.status(400).json({ error: validationError });
     }
 
+    let oldLimits = {};
+    try {
+      const oldRaw = await getObject(PAYMENT_LIMITS_KEY);
+      const oldJson = JSON.parse(oldRaw.toString());
+      oldLimits = oldJson.paymentLimits || {};
+    } catch (e) {
+      if (e.code !== 'NoSuchKey') throw e;
+    }
+
+    const newLimits = data.paymentLimits || {};
+    const auditEntries = [];
+    const username = req.username;
+
+    for (const key of Object.keys(newLimits)) {
+      if (oldLimits[key] === undefined) {
+        auditEntries.push({
+          username,
+          action: 'create',
+          payment_method: key,
+          old_min: null,
+          old_max: null,
+          new_min: newLimits[key].min,
+          new_max: newLimits[key].max
+        });
+      } else if (Number(oldLimits[key].min) !== Number(newLimits[key].min) || Number(oldLimits[key].max) !== Number(newLimits[key].max)) {
+        auditEntries.push({
+          username,
+          action: 'update',
+          payment_method: key,
+          old_min: oldLimits[key].min,
+          old_max: oldLimits[key].max,
+          new_min: newLimits[key].min,
+          new_max: newLimits[key].max
+        });
+      }
+    }
+
+    for (const key of Object.keys(oldLimits)) {
+      if (newLimits[key] === undefined) {
+        auditEntries.push({
+          username,
+          action: 'delete',
+          payment_method: key,
+          old_min: oldLimits[key].min,
+          old_max: oldLimits[key].max,
+          new_min: null,
+          new_max: null
+        });
+      }
+    }
+
     const fileName = PAYMENT_LIMITS_KEY;
     const result = await uploadObject({
       key: fileName,
       body: JSON.stringify(data, null, 2),
       contentType: 'application/json'
     });
+
+    appendAuditLogs(auditEntries).catch(e => console.error('appendAuditLogs error:', e.message));
 
     res.json({
       success: true,
@@ -636,6 +727,29 @@ app.post('/api/update-payment-limits', apiLimiter, requireAuth, async (req, res)
       error: 'เกิดข้อผิดพลาดในการอัพเดท',
       details: error.message
     });
+  }
+});
+
+app.get('/api/audit-logs', apiLimiter, requireAuth, async (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 100, 500);
+    if (usePostgres) {
+      const result = await pool.query(
+        'SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT $1',
+        [limit]
+      );
+      return res.json({ success: true, logs: result.rows });
+    }
+    const logFile = path.join(LOCAL_STORAGE_DIR, 'audit_logs.json');
+    let logs = [];
+    try {
+      const raw = await fs.promises.readFile(logFile, 'utf8');
+      logs = JSON.parse(raw);
+    } catch {}
+    return res.json({ success: true, logs: logs.slice(0, limit) });
+  } catch (error) {
+    console.error('Error fetching audit logs:', error);
+    res.status(500).json({ error: 'เกิดข้อผิดพลาดในการดึง audit logs', details: error.message });
   }
 });
 
